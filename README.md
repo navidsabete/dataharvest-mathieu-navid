@@ -2,7 +2,44 @@
 
 Framework de scraping modulaire -- projet final "Web Scraping", Master Dev, Data & IA, IPSSI Montpellier.
 
-## Implemente pour l'instant
+## Implementé pour l'instant
+
+### `dataharvest/config.py`
+
+- Chargement automatique d'un fichier **YAML** (`.yaml` , `.yml`) ou **JSON** (`.json`) selon son extension.
+- Vérification de l'existence du fichier (`FileNotFoundError`).
+- Validation de la présence des clés obligatoires (`ValueError` si une clé est absente).
+- Conversion récursive des dictionnaires en objets afin d'accéder aux paramètres -sous forme d'attributs (`config.fetcher.delay`).
+- Conservation de `selectors` sous forme de dictionnaire afin de permettre un nombre variable de champs à extraire.
+
+### `dataharvest/validator.py`
+
+- Vérification de la présence des champs obligatoires.
+- Validation du format des URL (HTTP/HTTPS avec domaine).
+- Vérification optionnelle d'une longueur minimale pour certains champs.
+- Séparation des éléments en deux listes :
+    - items valides ;
+    - items rejetés.
+- Journalisation (`logging.WARNING`) de chaque élément rejeté.
+
+### `dataharvest/store.py`
+
+**Backends supportés : CSV + SQLite + JSON**
+
+### `dataharvest/app.py`
+
+Il constitue le point d'entrée du projet.
+
+Il utilise `argparse` afin de proposer une interface en ligne de commande composée de trois sous-commandes :
+- `crawl`
+- `export`
+- `validate`
+
+**Fonctionnalités**
+- chargement de la configuration
+- détection automatique du backend lors d'un export
+- prise en charge de l'option --dry-run 
+- délégation de l'exécution du scraping à l'`Orchestrator`
 
 ### `dataharvest/middleware.py`
 
@@ -58,9 +95,11 @@ Teste avec du vrai HTML capture (curl, pas invente) sur les 5 sites cibles reten
 
 Details des pieges reels trouves par site (alignement des champs optionnels, attributs `class` multi-valeurs, structure en deux lignes...) dans `tests/test_pipeline.py` et `tests/test_pipeline_real_sites.py`.
 
-## A venir
+## Tests unitaires
 
-`config.py`, `validator.py`, `store.py`, `orchestrator.py`, `app.py`, configs finales des 5 sites, tests de `config.py`/`validator.py`/`store.py`/`orchestrator.py`.
+Les tests ont été réalisés avec `pytest` et couvrent les comportements critiques demandés par le sujet.
+
+`app.py` étant le point d'entrée du projet, il était pertinent d'ajouter une couverture de tests pour ce module avant de pouvoir intéragir avec l'app
 
 ## Auteurs
 
