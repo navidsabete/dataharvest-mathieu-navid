@@ -1,3 +1,5 @@
 PyYAML
 pytest
 pytest-cov
+requests
+beautifulsoup4
