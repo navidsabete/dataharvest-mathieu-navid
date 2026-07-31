@@ -338,7 +338,14 @@ HN_SELECTORS = {
     "url": "span.titleline > a::attr(href)",
     "domaine": "span.sitestr",
     "score": "span.score",
-    "commentaires": ".subline a:last-child",
+    # ">" (enfant direct) est indispensable ici : sans lui, "a:last-child" matche
+    # aussi le lien imbrique dans <span class="age"><a>X hours ago</a></span> --
+    # cet <a> est le dernier (et seul) enfant de SON parent (span.age), donc il
+    # matche ":last-child" lui aussi, et etant place avant le vrai lien commentaires
+    # dans le DOM, select_one() le renvoie en premier. Trouve en testant contre le
+    # vrai site (le fixture precedent, sans <a> imbrique dans .age, ne l'avait pas
+    # revele -- corrige aussi ci-dessous pour que ce test soit fidele au reel).
+    "commentaires": ".subline > a:last-child",
 }
 
 HN_HTML = """
@@ -351,7 +358,7 @@ HN_HTML = """
 </tr>
 <tr><td class="subtext"><span class="subline">
   <span class="score">120 points</span> by <a class="hnuser">someone</a>
-  <span class="age">3 hours ago</span>
+  <span class="age" title="2026-07-31T03:47:59"><a href="item?id=1">3 hours ago</a></span>
   <a href="hide?id=1">hide</a> | <a href="item?id=1">210 comments</a>
 </span></td></tr>
 <tr class="spacer" style="height:5px"></tr>
@@ -363,7 +370,7 @@ HN_HTML = """
 </tr>
 <tr><td class="subtext"><span class="subline">
   <span class="score">369 points</span> by <a class="hnuser">apitman</a>
-  <span class="age">6 hours ago</span>
+  <span class="age" title="2026-07-31T00:47:59"><a href="item?id=2">6 hours ago</a></span>
   <a href="hide?id=2">hide</a> | <a href="item?id=2">87 comments</a>
 </span></td></tr>
 </table>

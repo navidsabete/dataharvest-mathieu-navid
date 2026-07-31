@@ -66,6 +66,12 @@ Le sujet (section 4.2) ne demande de rendre configurable que `max_retries` pour 
 
 Les deux implementations concretes, `GenericPipeline` et `PaginationPipeline`, illustrent aussi un choix de conception fait pendant le developpement plutot qu'anticipe des le depart. Le modele par defaut ("flat" : un selecteur CSS par champ applique a toute la page, items reconstruits en zippant les correspondances par position) est simple et suffit pour la majorite des sites testes (books.toscrape.com, quotes.toscrape.com, blogdumoderateur.com). Mais il echoue silencieusement -- sans exception, juste des donnees fausses -- des qu'un champ est present pour certains items et absent pour d'autres. Trouve concretement sur news.ycombinator.com : le domaine source (`span.sitestr`) n'existe que pour les stories avec lien externe (absent des posts "Ask HN"), ce qui volait le domaine d'une story a l'autre. Plutot que d'imposer partout le modele plus lourd (conteneur d'item scope, comme le fait Scrapy nativement), le mode flat est reste le defaut et un second mode optionnel (`item_selector`, chaque champ cherche dans son propre conteneur) n'a ete ajoute que la ou un site le demande reellement -- 1 site sur 5 (news.ycombinator.com) en a effectivement besoin. Illustration concrete du principe "ne pas batir la complexite avant d'en avoir la preuve".
 
+### 2.3 Orchestrator : stockage par lot de pages et rapport de session
+
+`Orchestrator.run()` sauvegarde les items valides page par page (`store.save(valides)` a chaque iteration de la boucle de pagination), plutot que d'accumuler tous les items de toutes les pages en memoire puis de sauvegarder en une seule fois a la fin. Deux raisons concretes : (1) si le scraping s'interrompt en cours de route (erreur reseau irrecuperable au milieu des `max_pages` pages), les pages deja traitees restent stockees au lieu d'etre perdues -- comportement explicitement demande par le sujet ("appeler store.save() par lot de pages") ; (2) ca borne l'empreinte memoire a une page a la fois plutot qu'a l'integralite du site, ce qui compte sur les sites a forte pagination (jusqu'a 50 pages sur books.toscrape.com).
+
+Le rapport de session retourne par `run()` est un simple dict (pas une classe dediee) avec exactement les 6 cles demandees par le sujet -- `pages_scrapees`, `items_trouves`, `items_valides`, `items_rejetes`, `items_stockes`, `duree_secondes` -- construit par une methode privee `_build_report()` separee de la boucle principale : la logique de comptage (boucle de pagination) et la logique de mise en forme (rapport) restent independantes, chacune testable seule.
+
 ---
 
 ## 3. Comparaison avec Scrapy
@@ -137,6 +143,25 @@ Soit un gain theorique d'environ **8x** pour Scrapy sur ce volume, l'ecart se cr
 - **Sites non scrapables statiquement** : legifrance.gouv.fr et numerama.com ont ete abandonnes apres verification reelle (curl sur le vrai HTML, pas une supposition) plutot qu'ecartes a priori.
   - *legifrance.gouv.fr* : sa page de recherche est une SPA Angular -- le HTML brut recupere par `requests` ne contient qu'un message `<noscript>Javascript est desactive...</noscript>`, aucun contenu exploitable sans executer le JavaScript. Des pages individuelles (`/codes/article_lc/...`) sont, elles, bien rendues cote serveur -- mais scraper une liste de resultats de recherche generique n'est pas possible avec l'approche statique de DataHarvest.
   - *numerama.com* : le sujet demande "titre, date, tags, nombre de commentaires". Verifie a la fois sur la page d'accueil ET sur une vraie page d'article (curl, sans JS) : aucun tag ni compteur de commentaires n'est present dans le HTML statique -- pas de JSON-LD, pas de widget Disqus/Coral cote serveur, probablement charges en JavaScript cote client si meme disponibles. Seuls titre/url/date auraient ete exploitables pour ce site avec l'approche statique de DataHarvest, ce qui ne couvre pas les champs demandes par le sujet.
+- **Bug d'integration entre composants ecrits separement** : `Store.__init__` gardait le parametre `path` tel quel au lieu de le convertir en `Path`, alors que `save_csv`/`save_json` appellent `self.path.exists()` -- ca plantait des que `Store` recevait une simple string (le cas de `config.store.path`, venu du YAML). Corrige avec `self.path = Path(path)`, plus `self.path.parent.mkdir(parents=True, exist_ok=True)` (necessaire aussi car `output/` est gitignore, donc absent sur un clone frais).
+
+### 5.2 Application sur les 5 sites : ce que les tests unitaires n'avaient pas vu
+
+Les 5 configs (`configs/*.yaml`) ont ete testees en conditions reelles via `python -m dataharvest crawl --config configs/siteN.yaml` (vrai reseau, pas de mock) :
+
+| Site | Pages | Items stockes |
+|---|---|---|
+| books.toscrape.com | 2 | 40/40 |
+| quotes.toscrape.com | 2 | 20/20 |
+| fr.wikipedia.org | 1 | 49 (25 rejetes proprement) |
+| blogdumoderateur.com | 1 | 44/44 |
+| news.ycombinator.com | 2 | 60/60 |
+
+Deux constats concrets qui n'etaient pas visibles avant ce test de bout en bout :
+
+- **`required_fields`/`item_selector` ne peuvent pas rester en dur dans `Orchestrator`** : le pseudo-code du sujet fixe `Validator(required_fields=['titre', 'url'])`, mais seuls 2 des 5 sites reels ont naturellement ces deux champs. Sans changement, `items_stockes` aurait ete `0` pour quotes.toscrape.com (aucun item n'a de champ `url`). Rendu configurable par site via un bloc YAML optionnel (`validator: required_fields: [...]`, `item_selector: "..."`), avec repli sur le comportement impose par defaut si le site n'en a pas besoin -- books.toscrape.com et news.ycombinator.com continuent d'utiliser `['titre', 'url']` sans rien declarer de plus.
+- **Un selecteur teste en unitaire peut rester faux contre le vrai site** : le selecteur `commentaires` de news.ycombinator.com (`.subline a:last-child`) recuperait "X heures" au lieu du nombre de commentaires. En cause : `<span class="age"><a>X heures</a></span>` -- ce lien est le dernier (et seul) enfant de `span.age`, donc il matche aussi `:last-child`, et il precede le vrai lien commentaires dans le DOM ; `select_one()` renvoie le premier trouve. Le fixture de test (`tests/test_pipeline_real_sites.py`) etait simplifie et ne contenait pas ce lien imbrique -- il passait donc alors que le vrai site echouait. Corrige avec `.subline > a:last-child` (enfant direct), et le fixture de test corrige en meme temps pour refleter la vraie structure HTML. Argument concret pour le test d'integration reseau reel (section 5 du sujet) : un test unitaire n'est fiable que si son fixture est fidele au HTML reel.
+- **fr.wikipedia.org** : la page a en realite 2 tables `class="wikitable"` (la liste des presidents, et un tableau de resultats electoraux en %). Nos selecteurs etant globaux a toute la page, `annee` matche des lignes des deux tables, mais `nom`/`url` (qui exigent un lien) ne matchent que celles du tableau des presidents. Il y a donc plus de valeurs `annee` que de `nom`/`url` : les valeurs en trop se retrouvent assemblees dans des items sans `nom` ni `url` (ex: `{'nom': '', 'url': '', 'annee': '89 %'}`). Pas grave ici : `required_fields: [nom]` rejette proprement ces 25 items. Encore une illustration des limites du mode "flat" (section 2.2).
 
 *(Le reste de cette section -- retrospective globale, ce qu'on changerait, repartition des taches -- a completer une fois le framework termine.)*
 

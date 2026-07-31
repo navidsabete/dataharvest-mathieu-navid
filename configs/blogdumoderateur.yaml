@@ -1,0 +1,22 @@
+url: https://www.blogdumoderateur.com/
+pagination:
+  pattern: null
+  start: 1
+  max_pages: 1
+selectors:
+  titre: "h3.entry-title"
+  date: "time.entry-date::attr(datetime)"
+  categorie: "span.favtag"
+fetcher:
+  delay: 1.0
+  retries: 3
+  timeout: 15
+  user_agent: "DataHarvest/1.0 (+contact@ipssi.fr)"
+store:
+  backend: json
+  path: output/blogdumoderateur.json
+validator:
+  # Pas de champ 'url' fiable : la page a 2 gabarits de carte differents et
+  # un seul est couvert par un selecteur simple (voir tests_pipeline_real_sites.py).
+  # Pagination non verifiee pour ce site -> une seule page pour l'instant.
+  required_fields: [titre]

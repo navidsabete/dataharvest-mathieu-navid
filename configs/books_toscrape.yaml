@@ -1,0 +1,19 @@
+url: https://books.toscrape.com/
+pagination:
+  pattern: catalogue/page-{n}.html
+  start: 1
+  max_pages: 2
+selectors:
+  titre: "h3 a::attr(title)"
+  url: "h3 a::attr(href)"
+  prix: "p.price_color"
+  disponibilite: "p.instock.availability"
+  note: "p.star-rating::attr(class)"
+fetcher:
+  delay: 1.0
+  retries: 3
+  timeout: 15
+  user_agent: "DataHarvest/1.0 (+contact@ipssi.fr)"
+store:
+  backend: json
+  path: output/books_toscrape.json

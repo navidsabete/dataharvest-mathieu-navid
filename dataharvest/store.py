@@ -11,7 +11,8 @@ class Store:
      if backend not in self.BACKENDS:
         raise ValueError(f'Backend inconnu: {backend}')
      self.backend = backend
-     self.path = path
+     self.path = Path(path)
+     self.path.parent.mkdir(parents=True, exist_ok=True)
    
    def save(self, items: list[dict]) -> int:
      """Persiste les items. Retourne le nombre d'items insérés (hors doublons)."""

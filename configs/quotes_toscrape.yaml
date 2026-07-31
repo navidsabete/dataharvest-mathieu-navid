@@ -1,0 +1,21 @@
+url: https://quotes.toscrape.com/
+pagination:
+  pattern: /page/{n}/
+  start: 1
+  max_pages: 2
+selectors:
+  texte: "span.text"
+  auteur: "small.author"
+  tags: ".tags meta.keywords::attr(content)"
+fetcher:
+  delay: 1.0
+  retries: 3
+  timeout: 15
+  user_agent: "DataHarvest/1.0 (+contact@ipssi.fr)"
+store:
+  backend: json
+  path: output/quotes_toscrape.json
+validator:
+  # Pas d'URL par citation sur ce site (verifie) -- 'texte' est le seul champ
+  # qui identifie vraiment un item ici.
+  required_fields: [texte]
