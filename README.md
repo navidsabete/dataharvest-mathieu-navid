@@ -2,7 +2,44 @@
 
 Framework de scraping modulaire -- projet final "Web Scraping", Master Dev, Data & IA, IPSSI Montpellier.
 
-## Implemente pour l'instant
+## Implementé pour l'instant
+
+### `dataharvest/config.py`
+
+- Chargement automatique d'un fichier **YAML** (`.yaml` , `.yml`) ou **JSON** (`.json`) selon son extension.
+- Vérification de l'existence du fichier (`FileNotFoundError`).
+- Validation de la présence des clés obligatoires (`ValueError` si une clé est absente).
+- Conversion récursive des dictionnaires en objets afin d'accéder aux paramètres -sous forme d'attributs (`config.fetcher.delay`).
+- Conservation de `selectors` sous forme de dictionnaire afin de permettre un nombre variable de champs à extraire.
+
+### `dataharvest/validator.py`
+
+- Vérification de la présence des champs obligatoires.
+- Validation du format des URL (HTTP/HTTPS avec domaine).
+- Vérification optionnelle d'une longueur minimale pour certains champs.
+- Séparation des éléments en deux listes :
+    - items valides ;
+    - items rejetés.
+- Journalisation (`logging.WARNING`) de chaque élément rejeté.
+
+### `dataharvest/store.py`
+
+**Backends supportés : CSV + SQLite + JSON**
+
+### `dataharvest/app.py`
+
+Il constitue le point d'entrée du projet.
+
+Il utilise `argparse` afin de proposer une interface en ligne de commande composée de trois sous-commandes :
+- `crawl`
+- `export`
+- `validate`
+
+**Fonctionnalités**
+- chargement de la configuration
+- détection automatique du backend lors d'un export
+- prise en charge de l'option `--dry-run` 
+- délégation de l'exécution du scraping à l'`Orchestrator`
 
 ### `dataharvest/middleware.py`
 
@@ -68,9 +105,16 @@ Details des pieges reels trouves par site (alignement des champs optionnels, att
 - `run()` : boucle de pagination automatique via `pipeline.next_page_url()`, valide et **stocke par lot de pages** (chaque page sauvegardee des qu'elle est traitee, pas tout accumule puis ecrit a la fin). Retourne un rapport (dict) avec exactement les 6 cles demandees : `pages_scrapees`, `items_trouves`, `items_valides`, `items_rejetes`, `items_stockes`, `duree_secondes`.
 - Teste avec un `Fetcher` dont la session `requests` est mockee sur 2 pages (pas de reseau reel) : verifie les 6 cles du rapport, le comptage sur plusieurs pages, le rejet d'un item avec URL invalide, et le stockage cumulatif (`tests/test_orchestrator.py`).
 
-## A venir
 
-`app.py` (CLI crawl/export/validate + `--dry-run`), configs reelles des 5 sites (`configs/*.yaml`), `tests/test_integration.py`.
+## TODO:() A venir
+
+configs reelles des 5 sites (`configs/*.yaml`), `tests/test_integration.py`.
+
+## Tests unitaires
+
+Les tests ont été réalisés avec `pytest` et couvrent les comportements critiques demandés par le sujet.
+
+`app.py` étant le point d'entrée du projet, il était pertinent d'ajouter une couverture de tests pour ce module avant de pouvoir intéragir avec l'app
 
 ## Auteurs
 
