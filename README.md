@@ -38,7 +38,7 @@ Il utilise `argparse` afin de proposer une interface en ligne de commande compos
 **Fonctionnalités**
 - chargement de la configuration
 - détection automatique du backend lors d'un export
-- prise en charge de l'option --dry-run 
+- prise en charge de l'option `--dry-run` 
 - délégation de l'exécution du scraping à l'`Orchestrator`
 
 ### `dataharvest/middleware.py`
@@ -94,6 +94,21 @@ Teste avec du vrai HTML capture (curl, pas invente) sur les 5 sites cibles reten
 | news.ycombinator.com | 4 | titre, url, score, domaine, commentaires |
 
 Details des pieges reels trouves par site (alignement des champs optionnels, attributs `class` multi-valeurs, structure en deux lignes...) dans `tests/test_pipeline.py` et `tests/test_pipeline_real_sites.py`.
+
+### `dataharvest/config.py`, `validator.py`, `store.py` (Navid)
+
+`Config` (chargement YAML/JSON, validation des cles obligatoires), `Validator` (champs requis, URL, longueur min) et `Store` (backends csv/sqlite/json + `export_to()`) sont implementes, avec tests (`tests/test_config.py`, `tests/test_validator.py`, `tests/test_store.py`).
+
+### `dataharvest/orchestrator.py`
+
+- `Orchestrator(config)` : assemble `Fetcher` (avec `LoggingMiddleware` + `RetryMiddleware`), `PaginationPipeline` (avec `base_url=config.url`, indispensable pour resoudre les URLs relatives extraites par le pipeline), `Validator(required_fields=['titre', 'url'])` et `Store` -- conforme au pseudo-code impose section 4.7.
+- `run()` : boucle de pagination automatique via `pipeline.next_page_url()`, valide et **stocke par lot de pages** (chaque page sauvegardee des qu'elle est traitee, pas tout accumule puis ecrit a la fin). Retourne un rapport (dict) avec exactement les 6 cles demandees : `pages_scrapees`, `items_trouves`, `items_valides`, `items_rejetes`, `items_stockes`, `duree_secondes`.
+- Teste avec un `Fetcher` dont la session `requests` est mockee sur 2 pages (pas de reseau reel) : verifie les 6 cles du rapport, le comptage sur plusieurs pages, le rejet d'un item avec URL invalide, et le stockage cumulatif (`tests/test_orchestrator.py`).
+
+
+## TODO:() A venir
+
+configs reelles des 5 sites (`configs/*.yaml`), `tests/test_integration.py`.
 
 ## Tests unitaires
 
