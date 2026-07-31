@@ -1,0 +1,24 @@
+# Config dediee au test d'integration obligatoire (section 5 du sujet), qui
+# charge litteralement "configs/example_blog.yaml". Basee sur books.toscrape.com
+# plutot que blogdumoderateur.com : pagination reellement verifiee sur 2 pages,
+# et titre+url natifs (pas besoin d'un required_fields personnalise) -- le choix
+# le plus fiable pour un test qui doit rester stable en CI.
+url: https://books.toscrape.com/
+pagination:
+  pattern: catalogue/page-{n}.html
+  start: 1
+  max_pages: 2
+selectors:
+  titre: "h3 a::attr(title)"
+  url: "h3 a::attr(href)"
+  prix: "p.price_color"
+  disponibilite: "p.instock.availability"
+  note: "p.star-rating::attr(class)"
+fetcher:
+  delay: 1.0
+  retries: 3
+  timeout: 15
+  user_agent: "DataHarvest/1.0 (+contact@ipssi.fr)"
+store:
+  backend: json
+  path: output/example_blog.json

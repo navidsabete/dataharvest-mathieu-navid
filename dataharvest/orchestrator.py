@@ -60,7 +60,12 @@ class Orchestrator:
             if valides:
                 items_stockes += self.store.save(valides)
 
-            url = self.pipeline.next_page_url(html, url)
+            next_url = self.pipeline.next_page_url(html, url)
+            if next_url:
+                # Espacement entre deux pages du meme site (ex: Crawl-delay declare
+                # par un robots.txt) 
+                time.sleep(self.config.fetcher.delay)
+            url = next_url
 
         duree = time.perf_counter() - start
         return self._build_report(

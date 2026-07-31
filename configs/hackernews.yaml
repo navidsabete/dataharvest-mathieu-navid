@@ -11,7 +11,8 @@ selectors:
   commentaires: ".subline > a:last-child"
 item_selector: "tr.athing"
 fetcher:
-  delay: 1.0
+  # robots.txt de news.ycombinator.com declare "Crawl-delay: 30" pour User-agent: *
+  delay: 30.0
   retries: 3
   timeout: 15
   user_agent: "DataHarvest/1.0 (+contact@ipssi.fr)"
