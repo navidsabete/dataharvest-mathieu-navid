@@ -145,6 +145,24 @@ Soit un gain theorique d'environ **8x** pour Scrapy sur ce volume, l'ecart se cr
   - *numerama.com* : le sujet demande "titre, date, tags, nombre de commentaires". Verifie a la fois sur la page d'accueil ET sur une vraie page d'article (curl, sans JS) : aucun tag ni compteur de commentaires n'est present dans le HTML statique -- pas de JSON-LD, pas de widget Disqus/Coral cote serveur, probablement charges en JavaScript cote client si meme disponibles. Seuls titre/url/date auraient ete exploitables pour ce site avec l'approche statique de DataHarvest, ce qui ne couvre pas les champs demandes par le sujet.
 - **Bug d'integration entre composants ecrits separement** : `Store.__init__` gardait le parametre `path` tel quel au lieu de le convertir en `Path`, alors que `save_csv`/`save_json` appellent `self.path.exists()` -- ca plantait des que `Store` recevait une simple string (le cas de `config.store.path`, venu du YAML). Corrige avec `self.path = Path(path)`, plus `self.path.parent.mkdir(parents=True, exist_ok=True)` (necessaire aussi car `output/` est gitignore, donc absent sur un clone frais).
 
+### 5.2 Application sur les 5 sites : ce que les tests unitaires n'avaient pas vu
+
+Les 5 configs (`configs/*.yaml`) ont ete testees en conditions reelles via `python -m dataharvest crawl --config configs/siteN.yaml` (vrai reseau, pas de mock) :
+
+| Site | Pages | Items stockes |
+|---|---|---|
+| books.toscrape.com | 2 | 40/40 |
+| quotes.toscrape.com | 2 | 20/20 |
+| fr.wikipedia.org | 1 | 49 (25 rejetes proprement) |
+| blogdumoderateur.com | 1 | 44/44 |
+| news.ycombinator.com | 2 | 60/60 |
+
+Deux constats concrets qui n'etaient pas visibles avant ce test de bout en bout :
+
+- **`required_fields`/`item_selector` ne peuvent pas rester en dur dans `Orchestrator`** : le pseudo-code du sujet fixe `Validator(required_fields=['titre', 'url'])`, mais seuls 2 des 5 sites reels ont naturellement ces deux champs. Sans changement, `items_stockes` aurait ete `0` pour quotes.toscrape.com (aucun item n'a de champ `url`). Rendu configurable par site via un bloc YAML optionnel (`validator: required_fields: [...]`, `item_selector: "..."`), avec repli sur le comportement impose par defaut si le site n'en a pas besoin -- books.toscrape.com et news.ycombinator.com continuent d'utiliser `['titre', 'url']` sans rien declarer de plus.
+- **Un selecteur teste en unitaire peut rester faux contre le vrai site** : le selecteur `commentaires` de news.ycombinator.com (`.subline a:last-child`) recuperait "X heures" au lieu du nombre de commentaires. En cause : `<span class="age"><a>X heures</a></span>` -- ce lien est le dernier (et seul) enfant de `span.age`, donc il matche aussi `:last-child`, et il precede le vrai lien commentaires dans le DOM ; `select_one()` renvoie le premier trouve. Le fixture de test (`tests/test_pipeline_real_sites.py`) etait simplifie et ne contenait pas ce lien imbrique -- il passait donc alors que le vrai site echouait. Corrige avec `.subline > a:last-child` (enfant direct), et le fixture de test corrige en meme temps pour refleter la vraie structure HTML. Argument concret pour le test d'integration reseau reel (section 5 du sujet) : un test unitaire n'est fiable que si son fixture est fidele au HTML reel.
+- **fr.wikipedia.org** : la page a en realite 2 tables `class="wikitable"` (la liste des presidents, et un tableau de resultats electoraux en %). Nos selecteurs etant globaux a toute la page, `annee` matche des lignes des deux tables, mais `nom`/`url` (qui exigent un lien) ne matchent que celles du tableau des presidents. Il y a donc plus de valeurs `annee` que de `nom`/`url` : les valeurs en trop se retrouvent assemblees dans des items sans `nom` ni `url` (ex: `{'nom': '', 'url': '', 'annee': '89 %'}`). Pas grave ici : `required_fields: [nom]` rejette proprement ces 25 items. Encore une illustration des limites du mode "flat" (section 2.2).
+
 *(Le reste de cette section -- retrospective globale, ce qu'on changerait, repartition des taches -- a completer une fois le framework termine.)*
 
 - Quelle a ete la difficulte technique principale ? Comment l'avez-vous resolue ?

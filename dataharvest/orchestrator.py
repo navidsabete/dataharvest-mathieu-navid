@@ -20,8 +20,19 @@ class Orchestrator:
     def __init__(self, config: "Config"):
         self.config = config
         self.fetcher = Fetcher(config, middlewares=[LoggingMiddleware(), RetryMiddleware(config)])
-        self.pipeline = PaginationPipeline(config.selectors, config.pagination, base_url=config.url)
-        self.validator = Validator(required_fields=["titre", "url"])
+        # item_selector optionnel (cle top-level "item_selector" dans le YAML) : necessaire
+        # pour les sites ou un champ est absent pour certains items seulement (ex: le domaine
+        # source sur news.ycombinator.com, absent des posts "Ask HN") -- voir pipeline.py.
+        item_selector = getattr(config, "item_selector", None)
+        self.pipeline = PaginationPipeline(
+            config.selectors, config.pagination, base_url=config.url, item_selector=item_selector
+        )
+        # required_fields par defaut = pseudo-code du sujet (section 4.7), mais surchargeable
+        # par site via un bloc optionnel "validator: required_fields: [...]" dans le YAML --
+        # necessaire des que le champ identifiant principal du site n'est pas litteralement
+        # nomme 'titre'/'url' (ex: quotes.toscrape.com n'a pas d'URL par citation).
+        required_fields = getattr(getattr(config, "validator", None), "required_fields", None) or ["titre", "url"]
+        self.validator = Validator(required_fields=required_fields)
         self.store = Store(config.store.backend, config.store.path)
 
     def run(self) -> dict:
