@@ -252,15 +252,17 @@ Les tests sont réalisés avec **pytest**.
 Tests unitaires implémentés :
 - `test_config.py`
 - `test_fetcher.py`
+- `test_middleware.py`
 - `test_pipeline.py`
+- `test_pipeline_real_sites.py` (sélecteurs testés contre du HTML calqué sur les 5 vrais sites)
 - `test_validator.py`
 - `test_store.py`
 - `test_orchestrator.py`
 - `test_app.py`
 
-Les tests couvrent les comportements critiques demandés dans l'énoncé.
+Les tests couvrent les comportements critiques demandés dans l'énoncé. Couverture actuelle : **96 %** (`pytest --cov=dataharvest`).
 
-Les tests d'intégration (`pytest.mark.integration`) permettent d'exécuter un scraping complet sur un site réel.
+`test_integration.py` (marqué `@pytest.mark.integration`) charge `configs/example_blog.yaml` et lance un `Orchestrator.run()` complet sur le vrai site (books.toscrape.com, sans mock), vérifie `items_stockes >= 5` et que le fichier de sortie existe et n'est pas vide. Nécessite une connexion internet, exclu par défaut avec `pytest -m "not integration"`.
 
 Lancement des tests :
 
@@ -279,13 +281,6 @@ Avec couverture :
 ```bash
 pytest --cov=dataharvest --cov-report=term-missing -v
 ```
-
----
-
-# État du projet
-
-## À venir
-
 
 ---
 

@@ -137,7 +137,7 @@ Soit un gain theorique d'environ **8x** pour Scrapy sur ce volume, l'ecart se cr
 
 | Site | robots.txt | Nos URL concernees | Respecte ? |
 |---|---|---|---|
-| books.toscrape.com | Absent (404) | `/`, `/catalogue/page-N.html` | Rien a respecter -- pas de restriction declaree |
+| books.toscrape.com | Absent (404) | `/`, `/catalogue/page-N.html` | Pas de restriction declaree |
 | quotes.toscrape.com | Absent (404) | `/`, `/page/N/` | Idem |
 | fr.wikipedia.org | Present. `Disallow: /w/, /api/, /wiki/Special:...` pour `User-agent: *` | `/wiki/Liste_des_presidents_de_la_Republique_francaise` | Oui -- hors des chemins interdits |
 | blogdumoderateur.com | Present. `Disallow: /wp-admin, /feed/, /comments, /*.php$...` | `/` (page d'accueil) | Oui -- la racine n'est pas listee |
@@ -203,7 +203,7 @@ Deux constats concrets qui n'etaient pas visibles avant ce test de bout en bout 
 
 **Fonctionnalite non implementee par manque de temps.** Isoler le mot utile d'un attribut `class` multi-valeurs (ex: `"star-rating Three"` -> `"Three"` sur books.toscrape.com). S'implementerait comme une petite extension de la syntaxe `::attr(...)` deja existante, par exemple un filtre supplementaire du style `::attr(class)|last-word`, ou un registre de fonctions de transformation nommees passees au constructeur de `GenericPipeline`. Egalement non fait : `HttpCacheMiddleware` (section 3.1) et l'export multi-format simultane.
 
-**Repartition des taches.** Visible dans `git shortlog -sn --all` (9 commits Mathieu, 18 Navid cumules sur ses deux identites Git) et dans les messages de commits :
+**Repartition des taches.** Visible dans `git shortlog -sn --all` et dans les messages de commits :
 - **Navid** : `Config` (chargement YAML/JSON, validation), `Validator` (champs requis, URL, longueur min), `Store` (csv/sqlite/json, `export_to()`), le squelette CLI (`app.py`, parsing `argparse`), `.gitignore`, une partie du README et des tests de couverture.
 - **Mathieu** : `BaseMiddleware`/`LoggingMiddleware`/`RetryMiddleware`, `Fetcher`, `GenericPipeline`/`PaginationPipeline`, `Orchestrator`, le cablage final du CLI a `Orchestrator` (le `command_crawl` de Navid avait un TODO en attente), les 5 configs de sites et leur verification en conditions reelles, la majorite de ce rapport technique.
 - Repartition assez proche de la suggestion du planning du sujet (section 9), avec des ecarts : Navid a aussi fait `Store` (prevu sans attribution dans le planning), et le CLI a ete commence par Navid puis termine par Mathieu une fois `Orchestrator` disponible -- une dependance reelle entre les deux parties du planning ("Sprint 4"), pas un decoupage parfaitement etanche.
