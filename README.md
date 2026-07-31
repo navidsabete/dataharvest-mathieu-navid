@@ -64,13 +64,32 @@ Details des pieges reels trouves par site (alignement des champs optionnels, att
 
 ### `dataharvest/orchestrator.py`
 
-- `Orchestrator(config)` : assemble `Fetcher` (avec `LoggingMiddleware` + `RetryMiddleware`), `PaginationPipeline` (avec `base_url=config.url`, indispensable pour resoudre les URLs relatives extraites par le pipeline), `Validator(required_fields=['titre', 'url'])` et `Store` -- conforme au pseudo-code impose section 4.7.
+- `Orchestrator(config)` : assemble `Fetcher` (avec `LoggingMiddleware` + `RetryMiddleware`), `PaginationPipeline` (avec `base_url=config.url`, indispensable pour resoudre les URLs relatives extraites par le pipeline), `Validator` et `Store` -- conforme au pseudo-code impose section 4.7.
 - `run()` : boucle de pagination automatique via `pipeline.next_page_url()`, valide et **stocke par lot de pages** (chaque page sauvegardee des qu'elle est traitee, pas tout accumule puis ecrit a la fin). Retourne un rapport (dict) avec exactement les 6 cles demandees : `pages_scrapees`, `items_trouves`, `items_valides`, `items_rejetes`, `items_stockes`, `duree_secondes`.
+- `required_fields` (`Validator`) et `item_selector` (`Pipeline`) sont lus depuis la config si presents (`validator: required_fields: [...]`, `item_selector: "..."` en cle top-level du YAML), avec repli sur `['titre', 'url']` / aucun `item_selector` par defaut -- necessaire des que 3 des 5 sites reels n'ont pas naturellement `titre`+`url` comme champs identifiants (voir tableau plus bas).
 - Teste avec un `Fetcher` dont la session `requests` est mockee sur 2 pages (pas de reseau reel) : verifie les 6 cles du rapport, le comptage sur plusieurs pages, le rejet d'un item avec URL invalide, et le stockage cumulatif (`tests/test_orchestrator.py`).
+
+### `dataharvest/app.py`, `dataharvest/__main__.py`
+
+CLI (`crawl`/`export`/`validate` + `--dry-run`) : `command_crawl` appelle `Orchestrator.run()` et affiche le rapport, ou en `--dry-run` fetch+parse uniquement la premiere page sans stocker. `dataharvest/__main__.py` indispensable pour que `python -m dataharvest` fonctionne.
+
+### Configs des 5 sites (`configs/*.yaml`)
+
+Testees en conditions reelles via `python -m dataharvest crawl --config configs/siteN.yaml` (pas de mock, vrai reseau) :
+
+| Config | Pages | Items stockes |
+|---|---|---|
+| `books_toscrape.yaml` | 2 | 40/40 |
+| `quotes_toscrape.yaml` | 2 | 20/20 (`validator.required_fields: [texte]`, pas d'URL par citation) |
+| `wikipedia.yaml` | 1 | 49 (25 rejetes proprement -- 2e table `wikitable` sur la meme page, resultats electoraux en %) |
+| `blogdumoderateur.yaml` | 1 | 44/44 (`required_fields: [titre]`, pas d'URL fiable extraite) |
+| `hackernews.yaml` | 2 | 60/60 (`item_selector: "tr.athing"`) |
+
+Difficultes rencontrees en testant ces configs contre les vrais sites (bug de selecteur HN, tables multiples sur Wikipedia...) : voir `rapport-technique.md`, section 5.
 
 ## A venir
 
-`app.py` (CLI crawl/export/validate + `--dry-run`), configs reelles des 5 sites (`configs/*.yaml`), `tests/test_integration.py`.
+`tests/test_integration.py` (test end-to-end obligatoire, section 5 du sujet).
 
 ## Auteurs
 

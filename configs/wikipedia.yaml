@@ -1,0 +1,22 @@
+url: https://fr.wikipedia.org/wiki/Liste_des_pr%C3%A9sidents_de_la_R%C3%A9publique_fran%C3%A7aise
+pagination:
+  pattern: null
+  start: 1
+  max_pages: 1
+selectors:
+  nom: "table.wikitable tr td:nth-of-type(2) a"
+  url: "table.wikitable tr td:nth-of-type(2) a::attr(href)"
+  annee: "table.wikitable tr td:nth-of-type(3)"
+fetcher:
+  delay: 1.0
+  retries: 3
+  timeout: 15
+  user_agent: "DataHarvest/1.0 (+contact@ipssi.fr)"
+store:
+  backend: json
+  path: output/wikipedia.json
+validator:
+  # Pas de champ litteralement nomme 'titre' sur cette page -- 'nom' en est
+  # l'equivalent (nom du president). Page unique, pas de pagination (liste,
+  # pas un flux d'articles).
+  required_fields: [nom]

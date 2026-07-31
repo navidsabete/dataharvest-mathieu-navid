@@ -1,11 +1,7 @@
 import argparse
 from dataharvest.config import Config
 from dataharvest.store import Store
-from dataharvest.fetcher import Fetcher
-from dataharvest.pipeline import GenericPipeline
-from dataharvest.validator import Validator
-
-#TODO():from dataharvest.orchestrator import Orchestrator
+from dataharvest.orchestrator import Orchestrator
 
 
 def build_parser():
@@ -41,9 +37,23 @@ def command_export(args):
 
 def command_crawl(args):
     config = Config(args.config)
-    #TODO:()
-    #orchestrator = Orchestrator(config)
-    #orchestrator.run(dry_run=args.dry_run)
+    orchestrator = Orchestrator(config)
+
+    if args.dry_run:
+        html = orchestrator.fetcher.fetch(config.url)
+        items = orchestrator.pipeline.process(html)
+        print(f"[DRY RUN] {len(items)} item(s) trouve(s) sur la premiere page :")
+        for item in items:
+            print(item)
+        return
+
+    report = orchestrator.run()
+    print(f"Pages scrapees : {report['pages_scrapees']}")
+    print(f"Items trouves  : {report['items_trouves']}")
+    print(f"Items valides  : {report['items_valides']}")
+    print(f"Items rejetes  : {report['items_rejetes']}")
+    print(f"Items stockes  : {report['items_stockes']}")
+    print(f"Duree          : {report['duree_secondes']:.2f}s")
 
 def detect_backend(path):
     extension = path.split(".")[-1]

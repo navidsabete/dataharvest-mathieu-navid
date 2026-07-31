@@ -1,0 +1,20 @@
+url: https://news.ycombinator.com/
+pagination:
+  pattern: "?p={n}"
+  start: 1
+  max_pages: 2
+selectors:
+  titre: "span.titleline > a"
+  url: "span.titleline > a::attr(href)"
+  domaine: "span.sitestr"
+  score: "span.score"
+  commentaires: ".subline > a:last-child"
+item_selector: "tr.athing"
+fetcher:
+  delay: 1.0
+  retries: 3
+  timeout: 15
+  user_agent: "DataHarvest/1.0 (+contact@ipssi.fr)"
+store:
+  backend: json
+  path: output/hackernews.json
