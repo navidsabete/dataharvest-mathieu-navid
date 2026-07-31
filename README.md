@@ -36,9 +36,31 @@ Le sujet (section 4.2) ne demande de rendre configurable que `max_retries` pour 
 - **Erreur reseau (`ConnectionError`)** -> backoff exponentiel egalement, type d'exception loggue.
 - **404** -> `FetchError` immediat, sans passer par la boucle de retry.
 
+### `dataharvest/pipeline.py`
+
+- `BasePipeline` (ABC) : interface `process(html)` / `next_page_url(html, current_url)`.
+- `GenericPipeline(selectors, base_url="", item_selector=None)` : extrait des items depuis du HTML brut a partir de selecteurs CSS. Deux modes :
+  - **flat** (par defaut, `item_selector` non fourni) : un selecteur par champ applique a toute la page, items reconstruits en zippant les correspondances par position. Simple, mais suppose qu'un champ apparait au plus une fois par item -- un champ absent pour certains items seulement decale les suivants.
+  - **scope** (`item_selector` fourni) : chaque champ est cherche a l'interieur de son propre conteneur d'item, avec repli sur l'element suivant immediat s'il n'y est pas (utile pour les sites qui etalent un item sur deux elements adjacents). Evite le desalignement quand un champ est optionnel selon les items.
+  - Support `::attr(nom)` / `::text` en suffixe de selecteur (syntaxe inspiree de Scrapy) pour cibler un attribut plutot que le texte visible.
+  - URLs relatives resolues via `base_url` ; aucune exception si un selecteur ne trouve rien (chaine vide).
+- `PaginationPipeline(selectors, pagination_config, base_url="", item_selector=None)` : etend `GenericPipeline`, construit l'URL de la page suivante via `pagination_config.pattern.format(n=...)`, s'arrete a `max_pages` ou des qu'une page ne contient plus d'items.
+
+Teste avec du vrai HTML capture (curl, pas invente) sur les 5 sites cibles retenus, couvrant 4 niveaux de difficulte differents (contrainte de diversite du sujet respectee) :
+
+| Site | Niveau | Champs |
+|---|---|---|
+| books.toscrape.com | 1 | titre, url, prix, disponibilite, note |
+| quotes.toscrape.com | 1 | texte, auteur, tags |
+| fr.wikipedia.org | 2 | wikitable ET infobox |
+| blogdumoderateur.com | 3 | titre, date, categorie |
+| news.ycombinator.com | 4 | titre, url, score, domaine, commentaires |
+
+Details des pieges reels trouves par site (alignement des champs optionnels, attributs `class` multi-valeurs, structure en deux lignes...) dans `tests/test_pipeline.py` et `tests/test_pipeline_real_sites.py`.
+
 ## A venir
 
-`config.py`, `pipeline.py`, `validator.py`, `store.py`, `orchestrator.py`, `app.py`, tests, configs des sites.
+`config.py`, `validator.py`, `store.py`, `orchestrator.py`, `app.py`, configs finales des 5 sites, tests de `config.py`/`validator.py`/`store.py`/`orchestrator.py`.
 
 ## Auteurs
 

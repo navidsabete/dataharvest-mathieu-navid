@@ -12,7 +12,18 @@ Master Dev, Data & IA -- 4eme annee -- IPSSI Montpellier
 
 - Quel probleme DataHarvest resout-il ?
 - Quelles sont les limites de portee (ce qu'il ne fait pas intentionnellement) ?
-- Quel site avez-vous choisi pour tester ? Pourquoi ?
+
+### 1.1 Sites retenus pour les tests
+
+5 sites ont ete retenus, couvrant 4 niveaux de difficulte differents parmi les 4 proposes par le sujet (qui exige au minimum 2) :
+
+| Site | Niveau | Champs cibles |
+|---|---|---|
+| books.toscrape.com | 1 | titre, url, prix, disponibilite, note |
+| quotes.toscrape.com | 1 | texte, auteur, tags |
+| fr.wikipedia.org | 2 | wikitable ET infobox (listes, classements) |
+| blogdumoderateur.com | 3 | titre, date, categorie |
+| news.ycombinator.com | 4 | titre, url, score, domaine source, commentaires |
 
 ---
 
@@ -21,7 +32,6 @@ Master Dev, Data & IA -- 4eme annee -- IPSSI Montpellier
 *(A completer par le binome)*
 
 - Pourquoi une architecture en composants decouples plutot qu'un script monolithique ?
-- Pourquoi BasePipeline est-elle une classe abstraite (ABC) et pas une classe normale avec des methodes vides ?
 - Pourquoi le chargement de configuration via YAML plutot que des arguments CLI ?
 - Pourquoi l'injection de dependances dans le constructeur plutot que des imports directs ?
 
@@ -49,6 +59,12 @@ Le sujet (section 4.2) ne demande de rendre configurable que `max_retries` pour 
 - 500 sans `Retry-After` -> retombe sur le backoff exponentiel (`0.01s`, puis `0.02s` sur les tentatives suivantes).
 - Exception reseau (`requests.ConnectionError`) -> meme comportement de backoff exponentiel, avec le type d'exception journalise a chaque tentative.
 - 404 -> `FetchError` levee immediatement, sans passer par la boucle de retry (statut definitif, hors `RETRYABLE_STATUS_CODES`).
+
+### 2.2 Pourquoi BasePipeline est une ABC, et flat vs scope dans GenericPipeline
+
+`BasePipeline` est une classe abstraite (`abc.ABC` avec `@abstractmethod`) plutot qu'une classe normale a methodes vides, pour une raison concrete et pas seulement stylistique : Python leve une `TypeError` a l'instanciation si `process()` ou `next_page_url()` n'est pas implementee, *avant meme* que le code tourne. Avec une classe normale a methodes vides (`def process(self): pass`), une pipeline concrete qui oublierait d'implementer `process()` heriterait silencieusement de la version vide -- elle renverrait `None` ou `[]` sans erreur, et le bug ne serait decouvert qu'en production, quand l'Orchestrator recevrait des donnees vides sans explication. L'ABC deplace l'erreur du runtime tardif au chargement du module : c'est une garantie donnee a quiconque ecrit une pipeline personnalisee, pas juste une convention documentee dans un commentaire.
+
+Les deux implementations concretes, `GenericPipeline` et `PaginationPipeline`, illustrent aussi un choix de conception fait pendant le developpement plutot qu'anticipe des le depart. Le modele par defaut ("flat" : un selecteur CSS par champ applique a toute la page, items reconstruits en zippant les correspondances par position) est simple et suffit pour la majorite des sites testes (books.toscrape.com, quotes.toscrape.com, blogdumoderateur.com). Mais il echoue silencieusement -- sans exception, juste des donnees fausses -- des qu'un champ est present pour certains items et absent pour d'autres. Trouve concretement sur news.ycombinator.com : le domaine source (`span.sitestr`) n'existe que pour les stories avec lien externe (absent des posts "Ask HN"), ce qui volait le domaine d'une story a l'autre. Plutot que d'imposer partout le modele plus lourd (conteneur d'item scope, comme le fait Scrapy nativement), le mode flat est reste le defaut et un second mode optionnel (`item_selector`, chaque champ cherche dans son propre conteneur) n'a ete ajoute que la ou un site le demande reellement -- 1 site sur 5 (news.ycombinator.com) en a effectivement besoin. Illustration concrete du principe "ne pas batir la complexite avant d'en avoir la preuve".
 
 ---
 
@@ -114,7 +130,15 @@ Soit un gain theorique d'environ **8x** pour Scrapy sur ce volume, l'ecart se cr
 
 ## 5. Difficultes et retrospective
 
-*(A completer par le binome)*
+### 5.1 Difficultes rencontrees sur Pipeline (a completer par le reste du binome pour la retrospective globale)
+
+- **Desalignement silencieux en mode flat** : le piege le plus subtil rencontre pendant le developpement. Sur l'infobox Wikipedia, un selecteur naif (`table.infobox tr td`) recuperait la valeur de la ligne d'en-tete (un `<td colspan="2">` sans `<th>` associe) au lieu de la premiere vraie ligne de donnees, decalant tout le reste d'un cran -- aucune exception levee, juste des donnees fausses. Corrige avec le combinateur CSS `+` (`th[scope='row'] + td`) pour forcer l'appariement ligne par ligne. Le meme type de bug a ete retrouve independamment sur news.ycombinator.com (domaine source absent de certains items), corrige cette fois via le nouveau mode `item_selector` (voir section 2.2).
+- **Attributs `class` multi-valeurs** : sur books.toscrape.com, la note (`p.star-rating.Three`) encode l'information utile dans un deuxieme mot de l'attribut `class`, que BeautifulSoup retourne comme une liste Python plutot qu'une chaine. Le pipeline la rejoint en une seule chaine (`"star-rating Three"`) mais n'isole pas le mot utile ("Three") -- limite assumee et documentee dans les tests, pas corrigee (voir section 6 pour une piste).
+- **Sites non scrapables statiquement** : legifrance.gouv.fr et numerama.com ont ete abandonnes apres verification reelle (curl sur le vrai HTML, pas une supposition) plutot qu'ecartes a priori.
+  - *legifrance.gouv.fr* : sa page de recherche est une SPA Angular -- le HTML brut recupere par `requests` ne contient qu'un message `<noscript>Javascript est desactive...</noscript>`, aucun contenu exploitable sans executer le JavaScript. Des pages individuelles (`/codes/article_lc/...`) sont, elles, bien rendues cote serveur -- mais scraper une liste de resultats de recherche generique n'est pas possible avec l'approche statique de DataHarvest.
+  - *numerama.com* : le sujet demande "titre, date, tags, nombre de commentaires". Verifie a la fois sur la page d'accueil ET sur une vraie page d'article (curl, sans JS) : aucun tag ni compteur de commentaires n'est present dans le HTML statique -- pas de JSON-LD, pas de widget Disqus/Coral cote serveur, probablement charges en JavaScript cote client si meme disponibles. Seuls titre/url/date auraient ete exploitables pour ce site avec l'approche statique de DataHarvest, ce qui ne couvre pas les champs demandes par le sujet.
+
+*(Le reste de cette section -- retrospective globale, ce qu'on changerait, repartition des taches -- a completer une fois le framework termine.)*
 
 - Quelle a ete la difficulte technique principale ? Comment l'avez-vous resolue ?
 - Qu'est-ce que vous referiez differemment si vous recommenciez ?
