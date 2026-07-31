@@ -1,9 +1,6 @@
 import argparse
 from dataharvest.config import Config
 from dataharvest.store import Store
-from dataharvest.fetcher import Fetcher
-from dataharvest.pipeline import GenericPipeline
-from dataharvest.validator import Validator
 
 #TODO():from dataharvest.orchestrator import Orchestrator
 
