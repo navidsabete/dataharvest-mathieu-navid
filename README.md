@@ -2,120 +2,292 @@
 
 Framework de scraping modulaire -- projet final "Web Scraping", Master Dev, Data & IA, IPSSI Montpellier.
 
-## Implementé pour l'instant
+Le projet est construit autour d'une architecture en composants indépendants (Configuration, Fetcher, Pipeline, Validator, Store, Orchestrator) permettant de scraper différents sites à partir d'un simple fichier de configuration YAML/JSON.
 
-### `dataharvest/config.py`
 
-- Chargement automatique d'un fichier **YAML** (`.yaml` , `.yml`) ou **JSON** (`.json`) selon son extension.
-- Vérification de l'existence du fichier (`FileNotFoundError`).
-- Validation de la présence des clés obligatoires (`ValueError` si une clé est absente).
-- Conversion récursive des dictionnaires en objets afin d'accéder aux paramètres -sous forme d'attributs (`config.fetcher.delay`).
-- Conservation de `selectors` sous forme de dictionnaire afin de permettre un nombre variable de champs à extraire.
+---
 
-### `dataharvest/validator.py`
+# Architecture
 
-- Vérification de la présence des champs obligatoires.
-- Validation du format des URL (HTTP/HTTPS avec domaine).
-- Vérification optionnelle d'une longueur minimale pour certains champs.
-- Séparation des éléments en deux listes :
-    - items valides ;
-    - items rejetés.
-- Journalisation (`logging.WARNING`) de chaque élément rejeté.
+```
+                +------------------+
+                |   Config (YAML)  |
+                +--------+---------+
+                         |
+                         v
+                 +---------------+
+                 | Orchestrator  |
+                 +---------------+
+                  |    |    |    |
+                  |    |    |    |
+                  |    |    |    +--------------------+
+                  |    |    |                         |
+                  |    |    v                         v
+                  |    | Validator -------------> Store
+                  |    |
+                  |    v
+                  | Pipeline
+                  |
+                  v
+               Fetcher
+                  |
+                  v
+            Middleware chain
+```
+Flux de traitement :
 
-### `dataharvest/store.py`
+```
+Config
+   |
+   v
+Fetcher (+ Middleware)
+   |
+   v
+HTML
+   |
+   v
+Pipeline
+   |
+   v
+Items (list[dict])
+   |
+   v
+Validator
+   |
+   +--> Rejetés (logs)
+   |
+   +--> Valides
+          |
+          v
+        Store
+```
 
-**Backends supportés : CSV + SQLite + JSON**
+---
 
-### `dataharvest/middleware.py`
 
-- `BaseMiddleware` (ABC) : interface `process_request(url, headers)` / `process_response(response)`, implementee par chaque middleware concret.
-- `LoggingMiddleware` : logge chaque requete (`[GET url]`) et sa reponse (`[200 OK - 1.23s]`), temps mesure avec `time.perf_counter()`.
-- `RetryMiddleware` : detecte les statuts 408/429/5xx (`RETRYABLE_STATUS_CODES`) et leve `RetryableResponseError`. Pour un 429 (ou tout statut retryable), lit l'en-tete HTTP `Retry-After` (secondes ou date HTTP) et le transmet ; sinon expose le calcul du backoff exponentiel `base_delay * (2 ** attempt)` via `backoff_delay()`.
+# Installation
 
-### `dataharvest/fetcher.py`
+## Installation
 
-- `Fetcher` : telecharge le HTML via une `requests.Session()` partagee, fait passer chaque requete/reponse dans toute la chaine de middlewares (dans l'ordre d'ajout).
-- Retry avec backoff sur erreurs reseau et statuts 408/429/5xx ; leve `FetchError` apres epuisement des tentatives.
-- Sur un statut HTTP definitif non retryable (ex : 404, 403), leve `FetchError` immediatement sans gaspiller de tentatives.
-- Si le serveur fournit `Retry-After` (typiquement sur 429), ce delai prime sur le backoff calcule.
-- Chaque tentative ratee est loggee explicitement : `[RETRY url - detail - prochaine tentative dans Xs]` (URL, code HTTP ou type d'exception, delai).
-- `fetch_all()` respecte `config.fetcher.delay` entre chaque URL.
-- User-Agent toujours pris depuis la config (`config.fetcher.user_agent`), jamais le defaut Python.
+```bash
+git clone <repository>
+cd <repository-folder>
 
-#### Deux delais distincts, a ne pas confondre
+python -m venv dataharvest_env
 
-| | Source | Role |
-|---|---|---|
-| `config.fetcher.delay` | YAML, cle obligatoire validee par `Config` | Espacement entre deux URLs differentes (`fetch_all()`) |
-| `RetryMiddleware.base_delay` | Defaut Python (`1.0`) dans `middleware.py`, jamais lu depuis le YAML | Base du backoff exponentiel quand on retry une meme URL (`base * 2^attempt`) |
+# Windows
+.dataharvest_env\Scripts\activate
 
-Le sujet (section 4.2) ne demande de rendre configurable que `max_retries` pour `RetryMiddleware` -- c'est fait via `config.fetcher.retries`. `base_delay` reste un defaut de code, pas une cle YAML.
+# Linux / macOS
+source .dataharvest_env/bin/activate
 
-#### Verifications manuelles effectuees (mocks, hors reseau reel)
+pip install -r requirements.txt
+```
 
-- **429 avec `Retry-After: 2`** -> respecte les 2s du serveur, pas de calcul (meme avec un `base_delay` different).
-- **500 sans `Retry-After`** -> retombe sur le backoff exponentiel (`0.01s`, `0.02s`, ...).
-- **Erreur reseau (`ConnectionError`)** -> backoff exponentiel egalement, type d'exception loggue.
-- **404** -> `FetchError` immediat, sans passer par la boucle de retry.
+---
 
-### `dataharvest/pipeline.py`
+# Utilisation
 
-- `BasePipeline` (ABC) : interface `process(html)` / `next_page_url(html, current_url)`.
-- `GenericPipeline(selectors, base_url="", item_selector=None)` : extrait des items depuis du HTML brut a partir de selecteurs CSS. Deux modes :
-  - **flat** (par defaut, `item_selector` non fourni) : un selecteur par champ applique a toute la page, items reconstruits en zippant les correspondances par position. Simple, mais suppose qu'un champ apparait au plus une fois par item -- un champ absent pour certains items seulement decale les suivants.
-  - **scope** (`item_selector` fourni) : chaque champ est cherche a l'interieur de son propre conteneur d'item, avec repli sur l'element suivant immediat s'il n'y est pas (utile pour les sites qui etalent un item sur deux elements adjacents). Evite le desalignement quand un champ est optionnel selon les items.
-  - Support `::attr(nom)` / `::text` en suffixe de selecteur (syntaxe inspiree de Scrapy) pour cibler un attribut plutot que le texte visible.
-  - URLs relatives resolues via `base_url` ; aucune exception si un selecteur ne trouve rien (chaine vide).
-- `PaginationPipeline(selectors, pagination_config, base_url="", item_selector=None)` : etend `GenericPipeline`, construit l'URL de la page suivante via `pagination_config.pattern.format(n=...)`, s'arrete a `max_pages` ou des qu'une page ne contient plus d'items.
+## Lancer un scraping
 
-Teste avec du vrai HTML capture (curl, pas invente) sur les 5 sites cibles retenus, couvrant 4 niveaux de difficulte differents (contrainte de diversite du sujet respectee) :
+```bash
+python -m dataharvest crawl --config configs/example_blog.yaml
+```
 
-| Site | Niveau | Champs |
-|---|---|---|
-| books.toscrape.com | 1 | titre, url, prix, disponibilite, note |
-| quotes.toscrape.com | 1 | texte, auteur, tags |
-| fr.wikipedia.org | 2 | wikitable ET infobox |
-| blogdumoderateur.com | 3 | titre, date, categorie |
-| news.ycombinator.com | 4 | titre, url, score, domaine, commentaires |
+Mode simulation (aucune donnée n'est stockée) :
 
-Details des pieges reels trouves par site (alignement des champs optionnels, attributs `class` multi-valeurs, structure en deux lignes...) dans `tests/test_pipeline.py` et `tests/test_pipeline_real_sites.py`.
+```bash
+python -m dataharvest crawl --config configs/example_blog.yaml --dry-run
+```
 
-### `dataharvest/config.py`, `validator.py`, `store.py` (Navid)
+## Exporter un backend
 
-`Config` (chargement YAML/JSON, validation des cles obligatoires), `Validator` (champs requis, URL, longueur min) et `Store` (backends csv/sqlite/json + `export_to()`) sont implementes, avec tests (`tests/test_config.py`, `tests/test_validator.py`, `tests/test_store.py`).
+Exemple SQLite → CSV
 
-### `dataharvest/orchestrator.py`
+```bash
+python -m dataharvest export --from output/articles.db --to output/articles.csv
+```
 
-- `Orchestrator(config)` : assemble `Fetcher` (avec `LoggingMiddleware` + `RetryMiddleware`), `PaginationPipeline` (avec `base_url=config.url`, indispensable pour resoudre les URLs relatives extraites par le pipeline), `Validator` et `Store` -- conforme au pseudo-code impose section 4.7.
-- `run()` : boucle de pagination automatique via `pipeline.next_page_url()`, valide et **stocke par lot de pages** (chaque page sauvegardee des qu'elle est traitee, pas tout accumule puis ecrit a la fin). Retourne un rapport (dict) avec exactement les 6 cles demandees : `pages_scrapees`, `items_trouves`, `items_valides`, `items_rejetes`, `items_stockes`, `duree_secondes`.
-- `required_fields` (`Validator`) et `item_selector` (`Pipeline`) sont lus depuis la config si presents (`validator: required_fields: [...]`, `item_selector: "..."` en cle top-level du YAML), avec repli sur `['titre', 'url']` / aucun `item_selector` par defaut -- necessaire des que 3 des 5 sites reels n'ont pas naturellement `titre`+`url` comme champs identifiants (voir tableau plus bas).
-- Teste avec un `Fetcher` dont la session `requests` est mockee sur 2 pages (pas de reseau reel) : verifie les 6 cles du rapport, le comptage sur plusieurs pages, le rejet d'un item avec URL invalide, et le stockage cumulatif (`tests/test_orchestrator.py`).
+## Valider un fichier de configuration
 
-### `dataharvest/app.py`, `dataharvest/__main__.py`
+```bash
+python -m dataharvest validate --config configs/example_blog.yaml
+```
 
-CLI (`crawl`/`export`/`validate` + `--dry-run`) : `command_crawl` appelle `Orchestrator.run()` et affiche le rapport, ou en `--dry-run` fetch+parse uniquement la premiere page sans stocker. `dataharvest/__main__.py` indispensable pour que `python -m dataharvest` fonctionne.
+---
 
-### Configs des 5 sites (`configs/*.yaml`)
+# Modules implémentés
 
-Testees en conditions reelles via `python -m dataharvest crawl --config configs/siteN.yaml` (pas de mock, vrai reseau) :
+## `dataharvest/config.py`
 
-| Config | Pages | Items stockes |
-|---|---|---|
-| `books_toscrape.yaml` | 2 | 40/40 |
-| `quotes_toscrape.yaml` | 2 | 20/20 (`validator.required_fields: [texte]`, pas d'URL par citation) |
-| `wikipedia.yaml` | 1 | 49 (25 rejetes proprement -- 2e table `wikitable` sur la meme page, resultats electoraux en %) |
-| `blogdumoderateur.yaml` | 1 | 44/44 (`required_fields: [titre]`, pas d'URL fiable extraite) |
-| `hackernews.yaml` | 2 | 60/60 (`item_selector: "tr.athing"`) |
+Responsable du chargement de la configuration.
 
-Difficultes rencontrees en testant ces configs contre les vrais sites (bug de selecteur HN, tables multiples sur Wikipedia...) : voir `rapport-technique.md`, section 5.
+Fonctionnalités :
+- chargement YAML (`.yaml`, `.yml`) ou JSON (`.json`) ;
+- vérification de l'existence du fichier ;
+- validation des clés obligatoires ;
+- accès aux paramètres sous forme d'attributs (`config.fetcher.delay`) ;
+- conservation de `selectors` sous forme de dictionnaire.
 
-## Tests unitaires
+---
 
-Les tests ont ete realises avec `pytest` et couvrent les comportements critiques demandes par le sujet. `app.py` etant le point d'entree du projet, une couverture de tests a ete ajoutee pour ce module.
+## `dataharvest/middleware.py`
 
-## A venir
+Gestion de la chaîne de middlewares.
 
-`tests/test_integration.py` (test end-to-end obligatoire, section 5 du sujet).
+- `BaseMiddleware` : interface commune.
+- `LoggingMiddleware` : journalisation des requêtes/réponses.
+- `RetryMiddleware` :
+  - gestion des erreurs HTTP 408 / 429 / 5xx ;
+  - lecture de `Retry-After` ;
+  - backoff exponentiel configurable.
+
+---
+
+## `dataharvest/fetcher.py`
+
+Téléchargement des pages HTML.
+
+Fonctionnalités :
+- `requests.Session()` partagée ;
+- passage dans la chaîne de middlewares ;
+- gestion automatique des retries ;
+- respect du délai entre les requêtes (`config.fetcher.delay`) ;
+- utilisation du User-Agent défini dans la configuration.
+
+---
+
+## `dataharvest/pipeline.py`
+
+Extraction des données HTML.
+
+Deux implémentations :
+- `GenericPipeline`
+- `PaginationPipeline`
+
+Fonctionnalités :
+- extraction via sélecteurs CSS ;
+- support `::text` et `::attr(...)` ;
+- résolution des URLs relatives ;
+- pagination automatique jusqu'à `max_pages`.
+
+---
+
+## `dataharvest/validator.py`
+
+Validation des données avant stockage.
+
+Fonctionnalités :
+- vérification des champs obligatoires ;
+- validation des URL ;
+- contrôle optionnel de longueur minimale ;
+- séparation des items valides et rejetés ;
+- journalisation des éléments rejetés.
+
+---
+
+## `dataharvest/store.py`
+
+Persistance des données.
+
+Backends disponibles :
+- CSV
+- SQLite
+- JSON
+
+Fonctionnalités :
+- sauvegarde des données ;
+- comptage des éléments (`count()`) ;
+- export entre différents backends (`export_to()`).
+
+---
+
+## `dataharvest/orchestrator.py`
+
+Point central de l'application.
+
+Il assemble automatiquement :
+- Config
+- Fetcher
+- Middleware
+- Pipeline
+- Validator
+- Store
+
+`run()` :
+- effectue la pagination ;
+- valide les données ;
+- stocke les résultats page par page ;
+- retourne un rapport de session contenant :
+  - pages_scrapees
+  - items_trouves
+  - items_valides
+  - items_rejetes
+  - items_stockes
+  - duree_secondes
+
+---
+
+## `dataharvest/app.py`
+
+Point d'entrée CLI.
+
+Sous-commandes disponibles :
+- `crawl`
+- `export`
+- `validate`
+
+Fonctionnalités :
+- chargement de la configuration ;
+- mode `--dry-run` ;
+- détection automatique du backend lors d'un export ;
+- délégation du scraping à l'Orchestrator.
+
+---
+
+# Tests
+
+Les tests sont réalisés avec **pytest**.
+
+Tests unitaires implémentés :
+- `test_config.py`
+- `test_fetcher.py`
+- `test_pipeline.py`
+- `test_validator.py`
+- `test_store.py`
+- `test_orchestrator.py`
+- `test_app.py`
+
+Les tests couvrent les comportements critiques demandés dans l'énoncé.
+
+Les tests d'intégration (`pytest.mark.integration`) permettent d'exécuter un scraping complet sur un site réel.
+
+Lancement des tests :
+
+```bash
+pytest
+```
+
+Sans les tests d'intégration :
+
+```bash
+pytest -m "not integration"
+```
+
+Avec couverture :
+
+```bash
+pytest --cov=dataharvest --cov-report=term-missing -v
+```
+
+---
+
+# État du projet
+
+## À venir
+
+
+---
 
 ## Auteurs
 
