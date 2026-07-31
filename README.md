@@ -2,7 +2,29 @@
 
 Framework de scraping modulaire -- projet final "Web Scraping", Master Dev, Data & IA, IPSSI Montpellier.
 
-## Implemente pour l'instant
+## Implementé pour l'instant
+
+### `dataharvest/config.py`
+
+- Chargement automatique d'un fichier **YAML** (`.yaml` , `.yml`) ou **JSON** (`.json`) selon son extension.
+- Vérification de l'existence du fichier (`FileNotFoundError`).
+- Validation de la présence des clés obligatoires (`ValueError` si une clé est absente).
+- Conversion récursive des dictionnaires en objets afin d'accéder aux paramètres -sous forme d'attributs (`config.fetcher.delay`).
+- Conservation de `selectors` sous forme de dictionnaire afin de permettre un nombre variable de champs à extraire.
+
+### `dataharvest/validator.py`
+
+- Vérification de la présence des champs obligatoires.
+- Validation du format des URL (HTTP/HTTPS avec domaine).
+- Vérification optionnelle d'une longueur minimale pour certains champs.
+- Séparation des éléments en deux listes :
+    - items valides ;
+    - items rejetés.
+- Journalisation (`logging.WARNING`) de chaque élément rejeté.
+
+### `dataharvest/store.py`
+
+**Backends supportés : CSV + SQLite + JSON**
 
 ### `dataharvest/middleware.py`
 
@@ -86,6 +108,10 @@ Testees en conditions reelles via `python -m dataharvest crawl --config configs/
 | `hackernews.yaml` | 2 | 60/60 (`item_selector: "tr.athing"`) |
 
 Difficultes rencontrees en testant ces configs contre les vrais sites (bug de selecteur HN, tables multiples sur Wikipedia...) : voir `rapport-technique.md`, section 5.
+
+## Tests unitaires
+
+Les tests ont ete realises avec `pytest` et couvrent les comportements critiques demandes par le sujet. `app.py` etant le point d'entree du projet, une couverture de tests a ete ajoutee pour ce module.
 
 ## A venir
 
