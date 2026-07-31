@@ -1,2 +1,11 @@
-*__pycache__*
-*.coverage
+.venv/
+__pycache__/
+*.pyc
+*.db
+*.csv
+output/
+
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
