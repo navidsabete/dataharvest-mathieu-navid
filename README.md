@@ -1,4 +1,4 @@
-# dataharvest-mathieu-navid
+# DataHarvest
 
 Framework de scraping modulaire -- projet final "Web Scraping", Master Dev, Data & IA, IPSSI Montpellier.
 
