@@ -41,14 +41,8 @@ def command_export(args):
 
 def command_crawl(args):
     config = Config(args.config)
-    fetcher = Fetcher(config)
-    pipeline = GenericPipeline(selectors=config.selectors)
-    validator = Validator([])
-
-    store = Store(config.store.backend, config.store.path)
-
     #TODO:()
-    #orchestrator = Orchestrator(config, fetcher, pipeline, validator, store)
+    #orchestrator = Orchestrator(config)
     #orchestrator.run(dry_run=args.dry_run)
 
 def detect_backend(path):
